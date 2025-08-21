@@ -1,4 +1,4 @@
-import { initSignup } from './signup.js';
+import { initSignup } from './signup.js'; 
 // When ready, add login import and routing:
 // import { initLogin } from './login.js';
 

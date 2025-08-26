@@ -1,33 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SPA Auth App</title>
-  <link rel="stylesheet" href="./style.css" />
+  <meta charset="UTF-8">
+  <title>Firebase SDK Demo</title>
+  <!-- Use import maps for native ES module support -->
+  <script type="importmap">
+    {
+      "imports": {
+        "firebase/app": "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js",
+        "firebase/auth": "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js",
+        "firebase/messaging": "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js"
+      }
+    }
+  </script>
 </head>
 <body>
-  <div id="app"></div>
-
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js';
-    import { getAuth } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
+    import { initializeApp } from "firebase/app";
+    import { getAuth, signInAnonymously } from "firebase/auth";
+    import { getMessaging, getToken } from "firebase/messaging";
 
+    // Your public Firebase config (never include privateKey or secret here!)
     const firebaseConfig = {
-      apiKey: "AIzaSyAWphaG1_4n1i3F9kY_TrMdvjVQomu7OtQ",
-  authDomain: "organizer-359e3.firebaseapp.com",
-  projectId: "organizer-359e3",
-  storageBucket: "organizer-359e3.firebasestorage.app",
-  messagingSenderId: "223125946708",
-  appId: "1:223125946708:web:17850e13399725533288c1",
-  measurementId: "G-R9GMNJ5Q7T"
+      apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
+    authDomain: "general-68ca7.firebaseapp.com",
+    projectId: "general-68ca7",
+    storageBucket: "general-68ca7.firebasestorage.app",
+    messagingSenderId: "674522865143",
+    appId: "1:674522865143:web:c4ec47f2e370c33c3ca2f2",
+    measurementId: "G-6L0DXHGCBE"
     };
 
+    // 1. Initialize Firebase
     const app = initializeApp(firebaseConfig);
+
+    // 2. Setup Auth and sign in (you can use email & password if needed)
     const auth = getAuth(app);
-    window.firebaseAuth = auth;
- 
-    import('./main.js');
+    await signInAnonymously(auth);
+
+    // 3. Setup FCM Messaging and get browser token
+    const messaging = getMessaging(app);
+    // Replace with your web push public VAPID key from Firebase Console if using FCM web
+    const vapidKey = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA"; 
+    let fcmToken = "";
+    try {
+      fcmToken = await getToken(messaging, { vapidKey });
+      console.log("FCM registration token (browser, public):", fcmToken);
+    } catch (e) {
+      console.log("FCM error", e);
+    }
+
+    // Now, auth.currentUser.getIdToken() is your Firebase ID JWT
+    const idToken = await auth.currentUser.getIdToken();
+
+    // Use idToken and fcmToken to call your backend as needed
+    // Example: send to Worker
+    // await fetch('/api/save-browser-token', {
+    //   method: 'POST',
+    //   headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + idToken },
+    //   body: JSON.stringify({ fcmToken })
+    // });
   </script>
 </body>
 </html>

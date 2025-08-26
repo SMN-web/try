@@ -2,118 +2,98 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Push Notification Demo (No Auth)</title>
-  <script type="importmap">
-    {
-      "imports": {
-        "firebase/app": "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js",
-        "firebase/messaging": "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js"
-      }
-    }
-  </script>
+  <title>FCM Web Push Demo</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-messaging-compat.js"></script>
   <style>
-    body { font-family: system-ui, sans-serif; background: #f7fafc; margin: 0; }
-    #main { max-width: 430px; margin: 2.6em auto; padding: 2em 1.3em; background: #fff; border-radius: 14px; box-shadow: 0 2px 16px #bee0ff55; text-align: center; }
-    button { background:#1e5aec; color:#fff; font-weight:bold; border:none; border-radius:6px; padding:0.7em 1.55em; cursor:pointer; margin-bottom:1.2em; margin-top:0.6em; }
-    button:disabled { opacity:0.7; cursor: not-allowed; }
-    #status { min-height:1.7em; margin:1em 0 0.2em 0; color: #195e12; font-size: 1.03em;}
-    #notifMsg { font-size:1.09em; width:95%; margin-bottom:0.7em; padding:0.58em 0.7em; border-radius:7px; border:1px solid #c9d8ef; background:#f8fbfe;  }
-    #notifMsg:focus { border: 1.3px solid #4da3fd; background:#f1f8ff;}
+    body { font-family: system-ui, Arial; max-width: 720px; margin: 24px auto; padding: 12px; }
+    button { margin: 6px; padding: 10px 14px; }
+    pre { background: #f3f3f3; padding: 10px; white-space: pre-wrap; }
+    input[type="text"] { margin: 4px 0 8px 0; width: 350px; padding: 7px; }
   </style>
 </head>
 <body>
-  <div id="main">
-    <h2>Push Notification Demo (No Auth)</h2>
-    <button id="registerPushBtn">Register for Push Notifications</button>
-    <div id="status"></div>
-    <form id="sendForm" style="display: none;">
-      <input id="notifMsg" placeholder="Type a message..." required autocomplete="off" />
-      <button type="submit" id="sendBtn">Send Notification</button>
-    </form>
-  </div>
-  <script type="module">
-    import { initializeApp } from "firebase/app";
-    import { getMessaging, getToken, onMessage } from "firebase/messaging";
+  <h2>FCM Web Push Demo</h2>
+  <button id="registerBtn">Register & Get Token</button>
+  <input type="text" id="customMsg" placeholder="Message to send..." />
+  <button id="sendBtn" disabled>Send Notification</button>
+  <pre id="log"></pre>
 
-    // Your Firebase config and VAPID key
-    const firebaseConfig = {
-      apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
+<script>
+// Replace with your Firebase Config and VAPID Key
+const firebaseConfig = {
+  apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
     authDomain: "general-68ca7.firebaseapp.com",
     projectId: "general-68ca7",
     storageBucket: "general-68ca7.firebasestorage.app",
     messagingSenderId: "674522865143",
     appId: "1:674522865143:web:c4ec47f2e370c33c3ca2f2",
     measurementId: "G-6L0DXHGCBE"
-    };
-    const vapidKey = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA";
+};
+const VAPID_KEY = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA";
+const WORKER_API = "https://try.nafil-8895-s.workers.dev>"; // e.g. https://acme-example.workers.dev
 
-    let messaging, fcmToken;
-    let pushRegistered = false;
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
+let token = null;
 
-    const status = document.getElementById('status');
-    const registerPushBtn = document.getElementById('registerPushBtn');
-    const sendForm = document.getElementById('sendForm');
-    const notifMsg = document.getElementById('notifMsg');
-    const sendBtn = document.getElementById('sendBtn');
+function log(msg) {
+  document.getElementById('log').textContent += msg + "\n";
+}
 
-    registerPushBtn.onclick = async () => {
-      status.textContent = "Registering for push notifications...";
-      registerPushBtn.disabled = true;
-      try {
-        // Init Firebase once
-        const app = initializeApp(firebaseConfig);
-        messaging = getMessaging(app);
+document.getElementById('registerBtn').onclick = async () => {
+  try {
+    const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+    log('✅ SW registered');
+    const perm = await Notification.requestPermission();
+    log('🔔 Permission: ' + perm);
+    if (perm !== 'granted') return;
+    token = await messaging.getToken({ 
+      vapidKey: VAPID_KEY, 
+      serviceWorkerRegistration: reg 
+    });
+    if (!token) return log("❌ Could not get FCM token");
+    log('🎯 Token:\n' + token);
 
-        // Register SW for FCM web push
-        if ('serviceWorker' in navigator) {
-          await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-        }
-        // Request FCM token/permission
-        fcmToken = await getToken(messaging, { vapidKey });
-        // Save browser token to backend (no auth)
-        await fetch('https://try.nafil-8895-s.workers.dev/api/save-browser-token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fcmToken })
-        });
-        status.textContent = "Push ready! Type a message ⬇";
-        sendForm.style.display = "";
-        pushRegistered = true;
-      } catch (e) {
-        status.textContent = "Error: " + e.message;
-        registerPushBtn.disabled = false;
-      }
-    };
+    const resp = await fetch(WORKER_API + '/save', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token })
+    });
+    log("💾 Token saved response: " + resp.status + " - " + await resp.text());
+    document.getElementById('sendBtn').disabled = false;
+  } catch (e) {
+    log('❌ ' + e.message);
+  }
+};
 
-    // Send message to backend
-    sendForm.onsubmit = async e => {
-      e.preventDefault();
-      if (!pushRegistered) return;
-      sendBtn.disabled = true;
-      status.textContent = "Sending notification…";
-      try {
-        const msg = notifMsg.value.trim();
-        if (!msg) { status.textContent = "Message required"; sendBtn.disabled = false; return; }
-        const res = await fetch('https://try.nafil-8895-s.workers.dev/api/send-notification', {
-          method: 'POST',
-          headers: { 'Content-Type':'application/json' },
-          body: JSON.stringify({ message: msg })
-        });
-        const json = await res.json();
-        status.textContent = res.ok ? "Notification sent ✔" : "Send failed: " + (json.error || res.status);
-        sendBtn.disabled = false;
-      } catch(err) {
-        status.textContent = "Send failed: " + err.message;
-        sendBtn.disabled = false;
-      }
-    };
+document.getElementById('sendBtn').onclick = async () => {
+  const msg = document.getElementById('customMsg').value || "Default Web Push Message";
+  try {
+    const resp = await fetch(WORKER_API + '/send', {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: "FCM Demo", body: msg })
+    });
+    log("📤 Send response: " + resp.status + " - " + await resp.text());
+  } catch (e) {
+    log('❌ Send error: ' + e.message);
+  }
+};
 
-    // Foreground notification
-    try {
-      onMessage(getMessaging(), payload => {
-        alert("Push received: " + (payload?.notification?.title || "") + "\n" + (payload?.notification?.body || ""));
+// Display incoming foreground messages directly
+messaging.onMessage(payload => {
+  log('💬 Foreground message: ' + JSON.stringify(payload));
+  if (payload.notification && navigator.serviceWorker) {
+    navigator.serviceWorker.getRegistration().then(reg => {
+      reg && reg.showNotification(payload.notification.title, {
+        body: payload.notification.body,
+        icon: payload.notification.icon,
+        data: payload.data
       });
-    } catch (e) {}
-  </script>
+    });
+  }
+});
+</script>
 </body>
 </html>

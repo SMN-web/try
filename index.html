@@ -111,7 +111,7 @@
 
         // 3. Register SW for FCM web push
         if ('serviceWorker' in navigator) {
-          await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          await navigator.serviceWorker.register('./firebase-messaging-sw.js');
         }
         // 4. Get FCM token and prompt for permissions
         fcmToken = await getToken(messaging, { vapidKey });

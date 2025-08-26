@@ -83,7 +83,7 @@
         idToken = await auth.currentUser.getIdToken();
         // Register FCM SW
         if ('serviceWorker' in navigator) {
-          await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          await navigator.serviceWorker.register('./firebase-messaging-sw.js');
         }
         fcmToken = await getToken(messaging, { vapidKey });
         tokenBox.textContent = "FCM Token: " + fcmToken;

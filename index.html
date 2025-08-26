@@ -2,66 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Push Notification Demo</title>
+  <title>Push Notification Demo (No Auth)</title>
   <script type="importmap">
     {
       "imports": {
         "firebase/app": "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js",
-        "firebase/auth": "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js",
         "firebase/messaging": "https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging.js"
       }
     }
   </script>
   <style>
-    body { 
-      font-family: system-ui, sans-serif; 
-      background: #f7fafc; 
-      margin: 0; 
-    }
-    #main { 
-      max-width: 430px; 
-      margin: 2.6em auto; 
-      padding: 2em 1.3em; 
-      background: #fff; 
-      border-radius: 14px; 
-      box-shadow: 0 2px 16px #bee0ff55; 
-      text-align: center;
-    }
-    button { 
-      background: #1e5aec; 
-      color: #fff;
-      font-weight: bold;
-      border: none;
-      border-radius: 6px;
-      padding: 0.7em 1.55em;
-      cursor: pointer;
-      font-size: 1.08em;
-      margin-bottom: 1.2em;
-      margin-top: 0.6em;
-      box-shadow: 0 1px 4px #aad0ff22;
-      transition: background 0.17s, box-shadow 0.12s;
-    }
-    button:disabled { 
-      opacity: 0.7; 
-      cursor: not-allowed;
-    }
-    #status { min-height: 1.7em; margin: 1em 0 0.2em 0; color: #195e12; font-size: 1.03em;}
-    #notifMsg {
-      font-size: 1.09em;
-      width: 95%;
-      margin-bottom: 0.7em;
-      padding: 0.58em 0.7em;
-      border-radius: 7px;
-      border: 1px solid #c9d8ef;
-      background: #f8fbfe;
-      transition: border 0.15s;
-    }
-    #notifMsg:focus { border: 1.3px solid #4da3fd; background: #f1f8ff;}
+    body { font-family: system-ui, sans-serif; background: #f7fafc; margin: 0; }
+    #main { max-width: 430px; margin: 2.6em auto; padding: 2em 1.3em; background: #fff; border-radius: 14px; box-shadow: 0 2px 16px #bee0ff55; text-align: center; }
+    button { background:#1e5aec; color:#fff; font-weight:bold; border:none; border-radius:6px; padding:0.7em 1.55em; cursor:pointer; margin-bottom:1.2em; margin-top:0.6em; }
+    button:disabled { opacity:0.7; cursor: not-allowed; }
+    #status { min-height:1.7em; margin:1em 0 0.2em 0; color: #195e12; font-size: 1.03em;}
+    #notifMsg { font-size:1.09em; width:95%; margin-bottom:0.7em; padding:0.58em 0.7em; border-radius:7px; border:1px solid #c9d8ef; background:#f8fbfe;  }
+    #notifMsg:focus { border: 1.3px solid #4da3fd; background:#f1f8ff;}
   </style>
 </head>
 <body>
   <div id="main">
-    <h2>Push Notification Demo</h2>
+    <h2>Push Notification Demo (No Auth)</h2>
     <button id="registerPushBtn">Register for Push Notifications</button>
     <div id="status"></div>
     <form id="sendForm" style="display: none;">
@@ -71,10 +33,9 @@
   </div>
   <script type="module">
     import { initializeApp } from "firebase/app";
-    import { getAuth, signInAnonymously } from "firebase/auth";
     import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-    // --- Insert your public Firebase config and VAPID key here ---
+    // Your Firebase config and VAPID key
     const firebaseConfig = {
       apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
     authDomain: "general-68ca7.firebaseapp.com",
@@ -86,7 +47,7 @@
     };
     const vapidKey = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA";
 
-    let app, auth, messaging, idToken, fcmToken;
+    let messaging, fcmToken;
     let pushRegistered = false;
 
     const status = document.getElementById('status');
@@ -99,29 +60,23 @@
       status.textContent = "Registering for push notifications...";
       registerPushBtn.disabled = true;
       try {
-        // 1. Init Firebase (if not already)
-        if (!app) {
-          app = initializeApp(firebaseConfig);
-          auth = getAuth(app);
-          messaging = getMessaging(app);
-        }
-        // 2. Login anonymously (or use your real login logic)
-        await signInAnonymously(auth);
-        idToken = await auth.currentUser.getIdToken();
+        // Init Firebase once
+        const app = initializeApp(firebaseConfig);
+        messaging = getMessaging(app);
 
-        // 3. Register SW for FCM web push
+        // Register SW for FCM web push
         if ('serviceWorker' in navigator) {
           await navigator.serviceWorker.register('./firebase-messaging-sw.js');
         }
-        // 4. Get FCM token and prompt for permissions
+        // Request FCM token/permission
         fcmToken = await getToken(messaging, { vapidKey });
-        // 5. Store browser token with backend
+        // Save browser token to backend (no auth)
         await fetch('https://try.nafil-8895-s.workers.dev/api/save-browser-token', {
           method: 'POST',
-          headers: { 'Authorization': 'Bearer ' + idToken, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ fcmToken })
         });
-        status.textContent = "Push notifications ready!";
+        status.textContent = "Push ready! Type a message ⬇";
         sendForm.style.display = "";
         pushRegistered = true;
       } catch (e) {
@@ -130,19 +85,18 @@
       }
     };
 
-    // Handle notification sending
+    // Send message to backend
     sendForm.onsubmit = async e => {
       e.preventDefault();
       if (!pushRegistered) return;
       sendBtn.disabled = true;
       status.textContent = "Sending notification…";
       try {
-        const newIdToken = await auth.currentUser.getIdToken();
         const msg = notifMsg.value.trim();
         if (!msg) { status.textContent = "Message required"; sendBtn.disabled = false; return; }
         const res = await fetch('https://try.nafil-8895-s.workers.dev/api/send-notification', {
           method: 'POST',
-          headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+newIdToken },
+          headers: { 'Content-Type':'application/json' },
           body: JSON.stringify({ message: msg })
         });
         const json = await res.json();
@@ -154,7 +108,7 @@
       }
     };
 
-    // Optional: display push instantly when received in active tab
+    // Foreground notification
     try {
       onMessage(getMessaging(), payload => {
         alert("Push received: " + (payload?.notification?.title || "") + "\n" + (payload?.notification?.body || ""));

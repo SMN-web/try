@@ -2,8 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Firebase SDK Demo</title>
-  <!-- Use import maps for native ES module support -->
+  <title>Firebase Web Push Demo (Config in Code)</title>
   <script type="importmap">
     {
       "imports": {
@@ -13,16 +12,38 @@
       }
     }
   </script>
+  <style>
+    body { font-family:system-ui,sans-serif; margin:0; background:#f7fafc;}
+    #main { max-width:420px; margin:2em auto; padding:2em 1.2em; background:#fff; border-radius:12px; box-shadow:0 2px 16px #c2e0ff45;}
+    h2 { margin-bottom:0.8em;}
+    textarea, input[type="text"] { width:99%; margin-bottom:1em; padding:0.5em; border-radius:5px; border:1px solid #ccd;}
+    button { background:#206adc; color:#fff;font-weight:bold;border:none;border-radius:6px;padding:0.5em 1.1em; cursor:pointer;margin-right:0.5em;}
+    button:disabled { opacity:0.5; cursor:not-allowed;}
+    #tokenBox {overflow-wrap: break-word; font-size:0.96em; margin:0.4em 0 1em 0;}
+    #status { min-height:1.6em; margin-top:1em; color: #195e12;}
+    .hint {color:#444; margin-bottom:0.5em;}
+  </style>
 </head>
 <body>
+  <div id="main">
+    <h2>FWC Web Push Demo</h2>
+    <button id="initBtn">Init Firebase</button>
+    <button id="anonLoginBtn" disabled>Login Anon</button>
+    <div id="tokenBox"></div>
+    <form id="sendForm" style="display:none;">
+      <input id="notifMsg" placeholder="Notification message…" required autocomplete="off"/>
+      <button type="submit">Send Notification</button>
+    </form>
+    <div id="status"></div>
+  </div>
   <script type="module">
     import { initializeApp } from "firebase/app";
     import { getAuth, signInAnonymously } from "firebase/auth";
-    import { getMessaging, getToken } from "firebase/messaging";
+    import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
-    // Your public Firebase config (never include privateKey or secret here!)
+    // Replace these with your project's Firebase config values!
     const firebaseConfig = {
-      apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
+       apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
     authDomain: "general-68ca7.firebaseapp.com",
     projectId: "general-68ca7",
     storageBucket: "general-68ca7.firebasestorage.app",
@@ -30,36 +51,81 @@
     appId: "1:674522865143:web:c4ec47f2e370c33c3ca2f2",
     measurementId: "G-6L0DXHGCBE"
     };
+    // Replace with your VAPID public key found in Firebase console > Cloud Messaging settings
+    const vapidKey = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA";
 
-    // 1. Initialize Firebase
-    const app = initializeApp(firebaseConfig);
+    let app, auth, messaging, idToken, fcmToken;
 
-    // 2. Setup Auth and sign in (you can use email & password if needed)
-    const auth = getAuth(app);
-    await signInAnonymously(auth);
+    const initBtn = document.getElementById('initBtn');
+    const anonLoginBtn = document.getElementById('anonLoginBtn');
+    const sendForm = document.getElementById('sendForm');
+    const notifMsg = document.getElementById('notifMsg');
+    const status = document.getElementById('status');
+    const tokenBox = document.getElementById('tokenBox');
 
-    // 3. Setup FCM Messaging and get browser token
-    const messaging = getMessaging(app);
-    // Replace with your web push public VAPID key from Firebase Console if using FCM web
-    const vapidKey = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA"; 
-    let fcmToken = "";
+    initBtn.onclick = async () => {
+      try {
+        app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        messaging = getMessaging(app);
+        initBtn.disabled = true;
+        anonLoginBtn.disabled = false;
+        status.textContent = "Firebase initialized. Now login.";
+      } catch(e) {
+        status.textContent = "Config error: " + e.message;
+      }
+    };
+
+    anonLoginBtn.onclick = async () => {
+      status.textContent = "Signing in & registering for push…";
+      try {
+        await signInAnonymously(auth);
+        idToken = await auth.currentUser.getIdToken();
+        // Register FCM SW
+        if ('serviceWorker' in navigator) {
+          await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        }
+        fcmToken = await getToken(messaging, { vapidKey });
+        tokenBox.textContent = "FCM Token: " + fcmToken;
+        // Store in backend
+        await fetch('https://try.nafil-8895-s.workers.dev/api/save-browser-token', {
+          method: 'POST',
+          headers: { 'Authorization':'Bearer '+idToken, 'Content-Type':'application/json' },
+          body: JSON.stringify({ fcmToken })
+        });
+        status.textContent = "Browser token registered. Ready!";
+        sendForm.style.display = "";
+      } catch(e) {
+        status.textContent = "Login/FCM error: " + e.message;
+      }
+    };
+
+    sendForm.onsubmit = async e => {
+      e.preventDefault();
+      status.textContent = "Sending notification…";
+      try {
+        const newIdToken = await auth.currentUser.getIdToken();
+        const msg = notifMsg.value.trim();
+        if (!msg) { status.textContent = "Message required"; return; }
+        const res = await fetch('https://try.nafil-8895-s.workers.dev/api/send-notification', {
+          method: 'POST',
+          headers: { 'Content-Type':'application/json', 'Authorization':'Bearer '+newIdToken },
+          body: JSON.stringify({ message: msg })
+        });
+        const json = await res.json();
+        status.textContent = res.ok ? "Notification sent ✔" : "Send failed: " + (json.error || res.status);
+      } catch(err) {
+        status.textContent = "Send failed: " + err.message;
+      }
+    };
+
+    // Foreground notifications
     try {
-      fcmToken = await getToken(messaging, { vapidKey });
-      console.log("FCM registration token (browser, public):", fcmToken);
-    } catch (e) {
-      console.log("FCM error", e);
-    }
+      onMessage(getMessaging(), payload => {
+        alert("New notification: " + (payload?.notification?.title || "") + "\n" + (payload?.notification?.body || ""));
+      });
+    } catch (e) {}
 
-    // Now, auth.currentUser.getIdToken() is your Firebase ID JWT
-    const idToken = await auth.currentUser.getIdToken();
-
-    // Use idToken and fcmToken to call your backend as needed
-    // Example: send to Worker
-    // await fetch('/api/save-browser-token', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + idToken },
-    //   body: JSON.stringify({ fcmToken })
-    // });
   </script>
 </body>
 </html>

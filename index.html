@@ -2,98 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>FCM Web Push Demo</title>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-messaging-compat.js"></script>
+  <title>Evolving Rule World</title>
   <style>
-    body { font-family: system-ui, Arial; max-width: 720px; margin: 24px auto; padding: 12px; }
-    button { margin: 6px; padding: 10px 14px; }
-    pre { background: #f3f3f3; padding: 10px; white-space: pre-wrap; }
-    input[type="text"] { margin: 4px 0 8px 0; width: 350px; padding: 7px; }
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      background: #1e1e2f;
+      color: white;
+      margin: 0;
+      height: 100vh;
+      justify-content: center;
+    }
+    canvas {
+      border: 2px solid white;
+      background: #2c2c3c;
+    }
+    button {
+      margin: 10px;
+      padding: 8px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      background: #00c6ff;
+      color: black;
+    }
+    button:hover {
+      background: #00ff9d;
+    }
   </style>
 </head>
 <body>
-  <h2>FCM Web Push Demo</h2>
-  <button id="registerBtn">Register & Get Token</button>
-  <input type="text" id="customMsg" placeholder="Message to send..." />
-  <button id="sendBtn" disabled>Send Notification</button>
-  <pre id="log"></pre>
+  <h2>🌍 Evolving Rule World (Prototype)</h2>
+  <canvas id="world" width="400" height="400"></canvas>
+  <div>
+    <button onclick="addObject('blue_square')">Add Blue Square</button>
+    <button onclick="addObject('red_circle')">Add Red Circle</button>
+    <button onclick="startSim()">▶ Start Simulation</button>
+    <button onclick="stopSim()">⏹ Stop</button>
+  </div>
 
-<script>
-// Replace with your Firebase Config and VAPID Key
-const firebaseConfig = {
-  apiKey: "AIzaSyDtZnYYDb5TR01G6zsCtrF0HBR6pnQ2Beg",
-    authDomain: "general-68ca7.firebaseapp.com",
-    projectId: "general-68ca7",
-    storageBucket: "general-68ca7.firebasestorage.app",
-    messagingSenderId: "674522865143",
-    appId: "1:674522865143:web:c4ec47f2e370c33c3ca2f2",
-    measurementId: "G-6L0DXHGCBE"
-};
-const VAPID_KEY = "BPRGTQ4CHfKjbkTBB55DgkW4Ykq5lV_UXMLje5i31lJUKD2JsNebPjdaIWqXhYNDgYtQAlcoilvEG_GmYFwxXiA";
-const WORKER_API = "https://try.nafil-8895-s.workers.dev"; // e.g. https://acme-example.workers.dev
+  <script>
+    const canvas = document.getElementById("world");
+    const ctx = canvas.getContext("2d");
+    const gridSize = 40; // each cell size
+    const rows = canvas.height / gridSize;
+    const cols = canvas.width / gridSize;
 
-firebase.initializeApp(firebaseConfig);
-const messaging = firebase.messaging();
-let token = null;
+    let objects = []; // store objects
+    let running = false;
+    let loop;
 
-function log(msg) {
-  document.getElementById('log').textContent += msg + "\n";
-}
+    // Add an object at a random location
+    function addObject(type) {
+      const x = Math.floor(Math.random() * cols) * gridSize;
+      const y = Math.floor(Math.random() * rows) * gridSize;
+      objects.push({ type, x, y });
+      draw();
+    }
 
-document.getElementById('registerBtn').onclick = async () => {
-  try {
-    const reg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-    log('✅ SW registered');
-    const perm = await Notification.requestPermission();
-    log('🔔 Permission: ' + perm);
-    if (perm !== 'granted') return;
-    token = await messaging.getToken({ 
-      vapidKey: VAPID_KEY, 
-      serviceWorkerRegistration: reg 
-    });
-    if (!token) return log("❌ Could not get FCM token");
-    log('🎯 Token:\n' + token);
-
-    const resp = await fetch(WORKER_API + '/save', {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token })
-    });
-    log("💾 Token saved response: " + resp.status + " - " + await resp.text());
-    document.getElementById('sendBtn').disabled = false;
-  } catch (e) {
-    log('❌ ' + e.message);
-  }
-};
-
-document.getElementById('sendBtn').onclick = async () => {
-  const msg = document.getElementById('customMsg').value || "Default Web Push Message";
-  try {
-    const resp = await fetch(WORKER_API + '/send', {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "FCM Demo", body: msg })
-    });
-    log("📤 Send response: " + resp.status + " - " + await resp.text());
-  } catch (e) {
-    log('❌ Send error: ' + e.message);
-  }
-};
-
-// Display incoming foreground messages directly
-messaging.onMessage(payload => {
-  log('💬 Foreground message: ' + JSON.stringify(payload));
-  if (payload.notification && navigator.serviceWorker) {
-    navigator.serviceWorker.getRegistration().then(reg => {
-      reg && reg.showNotification(payload.notification.title, {
-        body: payload.notification.body,
-        icon: payload.notification.icon,
-        data: payload.data
+    // Draw world
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      objects.forEach(obj => {
+        if (obj.type === "blue_square") {
+          ctx.fillStyle = "blue";
+          ctx.fillRect(obj.x, obj.y, gridSize, gridSize);
+        } else if (obj.type === "red_circle") {
+          ctx.fillStyle = "red";
+          ctx.beginPath();
+          ctx.arc(obj.x + gridSize/2, obj.y + gridSize/2, gridSize/2 - 4, 0, Math.PI * 2);
+          ctx.fill();
+        }
       });
-    });
-  }
-});
-</script>
+    }
+
+    // Simple movement
+    function moveObjects() {
+      objects.forEach(obj => {
+        const dx = (Math.random() - 0.5) * gridSize;
+        const dy = (Math.random() - 0.5) * gridSize;
+        obj.x = Math.max(0, Math.min(canvas.width - gridSize, obj.x + dx));
+        obj.y = Math.max(0, Math.min(canvas.height - gridSize, obj.y + dy));
+      });
+    }
+
+    // Rule: if blue square touches red circle → red disappears
+    function applyRules() {
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const objA = objects[i];
+        if (objA.type === "blue_square") {
+          objects.forEach((objB, j) => {
+            if (objB.type === "red_circle" && objA.x === objB.x && objA.y === objB.y) {
+              objects.splice(j, 1); // remove red circle
+            }
+          });
+        }
+      }
+    }
+
+    // Simulation loop
+    function step() {
+      moveObjects();
+      applyRules();
+      draw();
+    }
+
+    function startSim() {
+      if (!running) {
+        running = true;
+        loop = setInterval(step, 500); // update every 0.5 sec
+      }
+    }
+
+    function stopSim() {
+      running = false;
+      clearInterval(loop);
+    }
+
+    draw(); // initial draw
+  </script>
 </body>
 </html>

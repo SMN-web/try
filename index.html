@@ -2,127 +2,50 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Evolving Rule World</title>
+  <title>RSA Key Pair Generator</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      font-family: Arial, sans-serif;
-      background: #1e1e2f;
-      color: white;
-      margin: 0;
-      height: 100vh;
-      justify-content: center;
-    }
-    canvas {
-      border: 2px solid white;
-      background: #2c2c3c;
-    }
-    button {
-      margin: 10px;
-      padding: 8px 14px;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      font-weight: bold;
-      background: #00c6ff;
-      color: black;
-    }
-    button:hover {
-      background: #00ff9d;
-    }
+    textarea { width: 100%; height: 100px; margin: 10px 0; }
+    button { font-size: 1.1em; }
   </style>
 </head>
 <body>
-  <h2>🌍 Evolving Rule World (Prototype)</h2>
-  <canvas id="world" width="400" height="400"></canvas>
-  <div>
-    <button onclick="addObject('blue_square')">Add Blue Square</button>
-    <button onclick="addObject('red_circle')">Add Red Circle</button>
-    <button onclick="startSim()">▶ Start Simulation</button>
-    <button onclick="stopSim()">⏹ Stop</button>
-  </div>
-
+  <h2>RSA 2048 Key Pair Generator</h2>
+  <button onclick="generate()">Generate Key Pair</button>
+  <div id="result" style="margin-top:20px;"></div>
   <script>
-    const canvas = document.getElementById("world");
-    const ctx = canvas.getContext("2d");
-    const gridSize = 40; // each cell size
-    const rows = canvas.height / gridSize;
-    const cols = canvas.width / gridSize;
+    async function generate() {
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = 'Generating... Please wait.';
 
-    let objects = []; // store objects
-    let running = false;
-    let loop;
+      // Generate the key
+      const keyPair = await window.crypto.subtle.generateKey(
+        {
+          name: "RSASSA-PKCS1-v1_5",
+          modulusLength: 2048,
+          publicExponent: new Uint8Array([1, 0, 1]),
+          hash: "SHA-256"
+        },
+        true,
+        ["sign", "verify"]
+      );
 
-    // Add an object at a random location
-    function addObject(type) {
-      const x = Math.floor(Math.random() * cols) * gridSize;
-      const y = Math.floor(Math.random() * rows) * gridSize;
-      objects.push({ type, x, y });
-      draw();
-    }
-
-    // Draw world
-    function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      objects.forEach(obj => {
-        if (obj.type === "blue_square") {
-          ctx.fillStyle = "blue";
-          ctx.fillRect(obj.x, obj.y, gridSize, gridSize);
-        } else if (obj.type === "red_circle") {
-          ctx.fillStyle = "red";
-          ctx.beginPath();
-          ctx.arc(obj.x + gridSize/2, obj.y + gridSize/2, gridSize/2 - 4, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      });
-    }
-
-    // Simple movement
-    function moveObjects() {
-      objects.forEach(obj => {
-        const dx = (Math.random() - 0.5) * gridSize;
-        const dy = (Math.random() - 0.5) * gridSize;
-        obj.x = Math.max(0, Math.min(canvas.width - gridSize, obj.x + dx));
-        obj.y = Math.max(0, Math.min(canvas.height - gridSize, obj.y + dy));
-      });
-    }
-
-    // Rule: if blue square touches red circle → red disappears
-    function applyRules() {
-      for (let i = objects.length - 1; i >= 0; i--) {
-        const objA = objects[i];
-        if (objA.type === "blue_square") {
-          objects.forEach((objB, j) => {
-            if (objB.type === "red_circle" && objA.x === objB.x && objA.y === objB.y) {
-              objects.splice(j, 1); // remove red circle
-            }
-          });
-        }
+      // Export as PEM
+      function toPem(buffer, label) {
+        const b64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+        const lines = b64.match(/.{1,64}/g).join('\n');
+        return `-----BEGIN ${label}-----\n${lines}\n-----END ${label}-----\n`;
       }
-    }
+      const pkcs8 = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
+      const spki = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
 
-    // Simulation loop
-    function step() {
-      moveObjects();
-      applyRules();
-      draw();
+      resultDiv.innerHTML = `
+        <h3>Private Key (keep this secret!)</h3>
+        <textarea readonly>${toPem(pkcs8, "PRIVATE KEY")}</textarea>
+        <h3>Public Key</h3>
+        <textarea readonly>${toPem(spki, "PUBLIC KEY")}</textarea>
+      `;
     }
-
-    function startSim() {
-      if (!running) {
-        running = true;
-        loop = setInterval(step, 500); // update every 0.5 sec
-      }
-    }
-
-    function stopSim() {
-      running = false;
-      clearInterval(loop);
-    }
-
-    draw(); // initial draw
   </script>
 </body>
 </html>
